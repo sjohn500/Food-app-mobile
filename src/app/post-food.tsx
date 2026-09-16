@@ -12,20 +12,20 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  'https://cawultvpqgetqtctgvud.supabase.co',
-  'sb_publishable_NuMW6LcXU5WFgOpse8topQ_r1LwAJAQ'
-);
+const SUPABASE_URL = 'https://cawultvpqgetqtctgvud.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_NuMW6LcXU5WFgOpse8topQ_r1LwAJAQ';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export default function PostFoodScreen() {
-  const [sellerName, setSellerName] = useState('');
-  const [dishName, setDishName] = useState('');
-  const [price, setPrice] = useState('');
-  const [description, setDescription] = useState('');
-  const [imageUri, setImageUri] = useState(null);
-  const [uploading, setUploading] = useState(false);
+  const [sellerName, setSellerName] = useState<string>('');
+  const [dishName, setDishName] = useState<string>('');
+  const [price, setPrice] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<boolean>(false);
 
-  const pickImage = async () => {
+  const pickImage = async (): Promise<void> => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
       Alert.alert('Permission needed', 'We need access to your photos.');
@@ -33,26 +33,24 @@ export default function PostFoodScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.7,
     });
 
-    if (!result.canceled) {
+    if (!result.canceled && result.assets.length > 0) {
       setImageUri(result.assets[0].uri);
     }
   };
 
-  const uploadImage = async (uri) => {
+  const uploadImage = async (uri: string): Promise<string> => {
     const response = await fetch(uri);
     const blob = await response.blob();
-    const fileExt = uri.split('.').pop();
+    const fileExt = uri.split('.').pop() ?? 'jpg';
     const fileName = `${Date.now()}.${fileExt}`;
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('food-photos')
-      .upload(fileName, blob, {
-        contentType: `image/${fileExt}`,
-      });
+      .upload(fileName, blob, { contentType: `image/${fileExt}` });
 
     if (error) throw error;
 
@@ -63,7 +61,7 @@ export default function PostFoodScreen() {
     return publicUrlData.publicUrl;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     if (!sellerName || !dishName || !price || !imageUri) {
       Alert.alert('Missing info', 'Please fill in all fields and add a photo.');
       return;
@@ -90,7 +88,8 @@ export default function PostFoodScreen() {
       setDescription('');
       setImageUri(null);
     } catch (err) {
-      Alert.alert('Error', err.message);
+      const message = err instanceof Error ? err.message : 'Something went wrong';
+      Alert.alert('Error', message);
     } finally {
       setUploading(false);
     }
@@ -128,9 +127,7 @@ export default function PostFoodScreen() {
       />
 
       <Button title="Pick a Photo" onPress={pickImage} />
-      {imageUri && (
-        <Image source={{ uri: imageUri }} style={styles.preview} />
-      )}
+      {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
 
       {uploading ? (
         <ActivityIndicator size="large" style={{ marginTop: 20 }} />
