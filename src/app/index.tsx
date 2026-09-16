@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { router } from 'expo-router';
 import { Button } from 'react-native';
 import * as Device from 'expo-device';
 import { Platform, StyleSheet } from 'react-native';
@@ -56,10 +56,7 @@ export default function HomeScreen() {
             hint={<ThemedText type="code">npm run reset-project</ThemedText>}
           />
         </ThemedView>
-
-        <Link href="/post-food" asChild>
-          <Button title="Post Food" />
-        </Link>
+        <Button title="Post Food" onPress={() => router.push('/post-food')} />
 
         {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
