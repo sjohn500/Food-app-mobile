@@ -38,6 +38,8 @@ export default function PostFoodScreen() {
       quality: 0.7,
     });
 
+    console.log('Picker result:', JSON.stringify(result));
+
     if (!result.canceled && result.assets.length > 0) {
       setImageUri(result.assets[0].uri);
     }
