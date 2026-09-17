@@ -1,180 +1,250 @@
+import React, { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { supabase } from '@/lib/supabase';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
+type FoodPost = {
+  id: number | string;
+  seller_name: string | null;
+  dish_name: string | null;
+  price: number | string | null;
+  description: string | null;
+  photo_url: string | null;
+};
+
+export default function ExploreScreen() {
+  const [posts, setPosts] = useState<FoodPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadPosts = async () => {
+    try {
+      console.log('========== LOADING POSTS ==========');
+
+      const { data, error } = await supabase
+        .from('post')
+        .select('*');
+
+      console.log('SUPABASE DATA:', data);
+      console.log('SUPABASE ERROR:', error);
+
+      if (error) {
+        Alert.alert('Supabase Error', error.message);
+        return;
+      }
+
+      setPosts(data ?? []);
+    } catch (error) {
+      console.log('LOAD ERROR:', error);
+
+      Alert.alert(
+        'Error',
+        error instanceof Error
+          ? error.message
+          : 'Unknown error'
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
-  const theme = useTheme();
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+  useFocusEffect(
+    useCallback(() => {
+      loadPosts();
+    }, [])
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadPosts();
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.loadingText}>
+          Loading food...
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <View style={styles.container}>
+      <Text style={styles.title}>Explore Food</Text>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
-
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
-
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
+      <FlatList
+        data={posts}
+        keyExtractor={(item, index) =>
+          item.id ? String(item.id) : String(index)
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+          />
+        }
+        contentContainerStyle={
+          posts.length === 0
+            ? styles.emptyContainer
+            : styles.list
+        }
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            {item.photo_url ? (
               <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
+                source={{ uri: item.photo_url }}
+                style={styles.foodImage}
+                contentFit="cover"
               />
-            </ThemedView>
-          </Collapsible>
+            ) : (
+              <View style={styles.noImage}>
+                <Text>No image</Text>
+              </View>
+            )}
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+            <View style={styles.cardContent}>
+              <Text style={styles.dishName}>
+                {item.dish_name || 'Unnamed dish'}
+              </Text>
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+              <Text style={styles.price}>
+                ₦{Number(item.price || 0).toLocaleString()}
+              </Text>
 
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+              <Text style={styles.seller}>
+                Seller: {item.seller_name || 'Unknown'}
+              </Text>
+
+              {item.description ? (
+                <Text style={styles.description}>
+                  {item.description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        )}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Text style={styles.emptyTitle}>
+              No food posts yet
+            </Text>
+
+            <Text style={styles.emptyText}>
+              No posts were returned from Supabase.
+            </Text>
+          </View>
+        }
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
   container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
+    flex: 1,
+    paddingTop: 60,
   },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
+
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    paddingHorizontal: 20,
+    marginBottom: 15,
   },
-  centerText: {
-    textAlign: 'center',
+
+  list: {
+    padding: 20,
+    paddingTop: 5,
   },
-  pressed: {
-    opacity: 0.7,
+
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    marginBottom: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
+
+  foodImage: {
     width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
+    height: 220,
   },
-  imageReact: {
-    width: 100,
-    height: 100,
-    alignSelf: 'center',
+
+  noImage: {
+    width: '100%',
+    height: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#eee',
+  },
+
+  cardContent: {
+    padding: 15,
+  },
+
+  dishName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+
+  price: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+
+  seller: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+
+  description: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: 10,
+  },
+
+  emptyContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+
+  empty: {
+    alignItems: 'center',
+    padding: 30,
+  },
+
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+
+  emptyText: {
+    marginTop: 10,
+    textAlign: 'center',
   },
 });
