@@ -1,4 +1,3 @@
-import 'react-native-url-polyfill/auto';
 import React, { useState } from 'react';
 import {
   View,
@@ -11,12 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = 'https://cawultvpqgetqtctgvud.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_NuMW6LcXU5WFgOpse8topQ_r1LwAJAQ';
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+import { supabase } from '@/lib/supabase';
 
 export default function PostFoodScreen() {
   const [sellerName, setSellerName] = useState<string>('');
@@ -37,8 +31,6 @@ export default function PostFoodScreen() {
       mediaTypes: ['images'],
       quality: 0.7,
     });
-
-    console.log('Picker result:', JSON.stringify(result));
 
     if (!result.canceled && result.assets.length > 0) {
       setImageUri(result.assets[0].uri);

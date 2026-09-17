@@ -56,7 +56,8 @@ export default function HomeScreen() {
             hint={<ThemedText type="code">npm run reset-project</ThemedText>}
           />
         </ThemedView>
-        <Button title="Post Food" onPress={() => router.push('/post-food')} />
+
+        <Button title="Login" onPress={() => router.push('/login')} />
 
         {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
