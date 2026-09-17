@@ -57,7 +57,7 @@ export default function HomeScreen() {
           />
         </ThemedView>
 
-        <Button title="Login" onPress={() => router.push('/login')} />
+        <Button title="Post Food" onPress={() => router.push('/post-food')} />
 
         {Platform.OS === 'web' && <WebBadge />}
       </SafeAreaView>
