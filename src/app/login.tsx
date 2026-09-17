@@ -41,7 +41,7 @@ export default function LoginScreen() {
         keyboardType="phone-pad"
       />
       {!otpSent ? (
-        <Button title="Send OTP" onPress={sendOtp} disabled={loading} />
+        <Button title="Send OTP" onPress={() => { alert('tapped'); sendOtp(); }} disabled={loading} />
       ) : (
         <>
           <TextInput
