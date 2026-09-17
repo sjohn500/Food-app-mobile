@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+
 import { supabase } from '@/lib/supabase';
 import { uploadImage } from '@/lib/cloudinary';
 
@@ -20,6 +22,35 @@ export default function PostFoodScreen() {
   const [description, setDescription] = useState<string>('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+
+  // Check authentication as soon as Post Food opens
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        console.log('Auth check error:', error);
+      }
+
+      if (!data.session) {
+        Alert.alert(
+          'Sign in required',
+          'Please sign in before posting food.',
+          [
+            {
+              text: 'Sign In',
+              onPress: () => router.replace('/login'),
+            },
+          ]
+        );
+      }
+
+      setCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, []);
 
   const pickImage = async (): Promise<void> => {
     const permission =
@@ -44,6 +75,24 @@ export default function PostFoodScreen() {
   };
 
   const handleSubmit = async (): Promise<void> => {
+    // Check authentication again before posting
+    const { data } = await supabase.auth.getSession();
+
+    if (!data.session) {
+      Alert.alert(
+        'Sign in required',
+        'Please sign in before posting food.',
+        [
+          {
+            text: 'Sign In',
+            onPress: () => router.replace('/login'),
+          },
+        ]
+      );
+
+      return;
+    }
+
     if (!sellerName || !dishName || !price || !imageUri) {
       Alert.alert(
         'Missing info',
@@ -71,7 +120,12 @@ export default function PostFoodScreen() {
         throw error;
       }
 
-      Alert.alert('Success', 'Your food post is live!');
+      Alert.alert('Success', 'Your food post is live!', [
+        {
+          text: 'View Food',
+          onPress: () => router.push('/explore'),
+        },
+      ]);
 
       setSellerName('');
       setDishName('');
@@ -90,9 +144,23 @@ export default function PostFoodScreen() {
     }
   };
 
+  if (checkingAuth) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+
+        <Text style={styles.loadingText}>
+          Checking sign in...
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Post Your Food</Text>
+      <Text style={styles.title}>
+        Post Your Food
+      </Text>
 
       <TextInput
         style={styles.input}
@@ -156,6 +224,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     paddingTop: 60,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: 10,
   },
 
   title: {
