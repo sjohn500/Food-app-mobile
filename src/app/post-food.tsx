@@ -16,12 +16,12 @@ import { supabase } from '@/lib/supabase';
 import { uploadImage } from '@/lib/cloudinary';
 
 export default function PostFoodScreen() {
-  const [sellerName, setSellerName] = useState<string>('');
-  const [dishName, setDishName] = useState<string>('');
-  const [price, setPrice] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
+  const [sellerName, setSellerName] = useState('');
+  const [dishName, setDishName] = useState('');
+  const [price, setPrice] = useState('');
+  const [description, setDescription] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<boolean>(false);
+  const [uploading, setUploading] = useState(false);
 
   const pickImage = async (): Promise<void> => {
     const permission =
@@ -46,7 +46,12 @@ export default function PostFoodScreen() {
   };
 
   const handleSubmit = async (): Promise<void> => {
-    if (!sellerName || !dishName || !price || !imageUri) {
+    if (
+      !sellerName.trim() ||
+      !dishName.trim() ||
+      !price.trim() ||
+      !imageUri
+    ) {
       Alert.alert(
         'Missing info',
         'Please fill in all fields and add a photo.'
@@ -54,32 +59,53 @@ export default function PostFoodScreen() {
       return;
     }
 
+    // Convert the price to a number.
+    const numericPrice = Number(
+      price.replace(/,/g, '').trim()
+    );
+
+    // Check that the price is valid.
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+      Alert.alert(
+        'Invalid price',
+        'Please enter a valid price, for example 1500.'
+      );
+      return;
+    }
+
     setUploading(true);
 
     try {
-      // Upload image to Cloudinary
+      // Upload image to Cloudinary.
       const photoUrl = await uploadImage(imageUri);
 
-      // Save food information + Cloudinary URL in Supabase
-      const { error } = await supabase.from('post').insert({
-        seller_name: sellerName,
-        dish_name: dishName,
-        price: parseFloat(price),
-        description: description,
-        photo_url: photoUrl,
-      });
+      // Save food information in Supabase.
+      const { error } = await supabase
+        .from('post')
+        .insert({
+          seller_name: sellerName.trim(),
+          dish_name: dishName.trim(),
+          price: numericPrice,
+          description: description.trim(),
+          photo_url: photoUrl,
+        });
 
       if (error) {
         throw error;
       }
 
-      Alert.alert('Success', 'Your food post is live!', [
-        {
-          text: 'View Food',
-          onPress: () => router.push('/feed'),
-        },
-      ]);
+      Alert.alert(
+        'Success',
+        `Your food post is live at ₦${numericPrice.toLocaleString('en-NG')}!`,
+        [
+          {
+            text: 'View Food',
+            onPress: () => router.push('/explore'),
+          },
+        ]
+      );
 
+      // Clear the form.
       setSellerName('');
       setDishName('');
       setPrice('');
@@ -126,7 +152,7 @@ export default function PostFoodScreen() {
       />
 
       <TextInput
-        style={[styles.input, { height: 80 }]}
+        style={[styles.input, styles.descriptionInput]}
         placeholder="Description"
         value={description}
         onChangeText={setDescription}
@@ -148,7 +174,7 @@ export default function PostFoodScreen() {
       {uploading ? (
         <ActivityIndicator
           size="large"
-          style={{ marginTop: 20 }}
+          style={styles.loader}
         />
       ) : (
         <Button
@@ -181,10 +207,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  descriptionInput: {
+    height: 80,
+  },
+
   preview: {
     width: '100%',
     height: 200,
     marginVertical: 12,
     borderRadius: 8,
+  },
+
+  loader: {
+    marginTop: 20,
   },
 });
