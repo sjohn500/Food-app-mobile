@@ -6,44 +6,80 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { supabase } from '@/lib/supabase';
 
+type Category =
+  | 'All'
+  | 'Local Food'
+  | 'Foreign Food'
+  | 'Fruit'
+  | 'Snack';
+
 type FoodPost = {
-  id: number | string;
+  id: string;
+  user_id: string | null;
   seller_name: string | null;
   dish_name: string | null;
   price: number | string | null;
   description: string | null;
   photo_url: string | null;
+  category: string | null;
 };
+
+const categories: {
+  name: Category;
+  icon: string;
+}[] = [
+  { name: 'All', icon: '🍽️' },
+  { name: 'Local Food', icon: '🍲' },
+  { name: 'Foreign Food', icon: '🌍' },
+  { name: 'Fruit', icon: '🍎' },
+  { name: 'Snack', icon: '🍪' },
+];
 
 export default function ExploreScreen() {
   const [posts, setPosts] = useState<FoodPost[]>([]);
+  const [currentUserId, setCurrentUserId] =
+    useState<string | null>(null);
+
+  const [selectedCategory, setSelectedCategory] =
+    useState<Category>('All');
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [orderingPostId, setOrderingPostId] =
+    useState<string | null>(null);
+
   const loadPosts = async () => {
     try {
-      console.log('========== LOADING POSTS ==========');
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      setCurrentUserId(user?.id ?? null);
 
       const { data, error } = await supabase
         .from('post')
-        .select('*');
-
-      console.log('SUPABASE DATA:', data);
-      console.log('SUPABASE ERROR:', error);
+        .select('*')
+        .order('created_at', { ascending: false });
 
       if (error) {
-        Alert.alert('Supabase Error', error.message);
+        Alert.alert(
+          'Supabase Error',
+          error.message
+        );
         return;
       }
 
-      setPosts(data ?? []);
+      setPosts((data ?? []) as FoodPost[]);
     } catch (error) {
       console.log('LOAD ERROR:', error);
 
@@ -51,7 +87,7 @@ export default function ExploreScreen() {
         'Error',
         error instanceof Error
           ? error.message
-          : 'Unknown error'
+          : 'Could not load food.'
       );
     } finally {
       setLoading(false);
@@ -70,10 +106,231 @@ export default function ExploreScreen() {
     await loadPosts();
   };
 
+  const handleOrder = (post: FoodPost) => {
+    const price = Number(post.price);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      Alert.alert(
+        'Invalid price',
+        'This food has an invalid price.'
+      );
+      return;
+    }
+
+    Alert.prompt(
+      `Order ${post.dish_name || 'Food'}`,
+      'How many do you want?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Order',
+          onPress: (value?: string) =>
+            createOrder(post, value),
+        },
+      ],
+      'plain-text',
+      '1'
+    );
+  };
+
+  const createOrder = async (
+    post: FoodPost,
+    quantityText?: string
+  ) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert(
+          'Login required',
+          'Please sign in before placing an order.',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Login',
+              onPress: () =>
+                router.push('/login'),
+            },
+          ]
+        );
+
+        return;
+      }
+
+      if (!post.user_id) {
+        Alert.alert(
+          'Unavailable',
+          'This food cannot be ordered because the seller is not linked to the post.'
+        );
+        return;
+      }
+
+      if (post.user_id === user.id) {
+        Alert.alert(
+          'Your own food',
+          'You cannot order your own food.'
+        );
+        return;
+      }
+
+      const quantity = Number(
+        quantityText?.trim() || '1'
+      );
+
+      if (
+        !Number.isInteger(quantity) ||
+        quantity <= 0
+      ) {
+        Alert.alert(
+          'Invalid quantity',
+          'Please enter a whole number greater than 0.'
+        );
+        return;
+      }
+
+      const price = Number(post.price);
+
+      if (!Number.isFinite(price) || price <= 0) {
+        Alert.alert(
+          'Invalid price',
+          'This food has an invalid price.'
+        );
+        return;
+      }
+
+      const totalPrice = price * quantity;
+
+      setOrderingPostId(post.id);
+
+      const { error } = await supabase
+        .from('orders')
+        .insert({
+          buyer_id: user.id,
+          seller_id: post.user_id,
+          post_id: post.id,
+          quantity,
+          total_price: totalPrice,
+          status: 'pending',
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert(
+        'Order placed!',
+        `${quantity} × ${
+          post.dish_name || 'Food'
+        }\nTotal: ₦${totalPrice.toLocaleString()}\n\nYour order is now pending.`
+      );
+    } catch (error) {
+      console.log('ORDER ERROR:', error);
+
+      Alert.alert(
+        'Order failed',
+        error instanceof Error
+          ? error.message
+          : 'Could not place the order.'
+      );
+    } finally {
+      setOrderingPostId(null);
+    }
+  };
+
+  const handleDelete = (postId: string) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this food post?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deletePost(postId),
+        },
+      ]
+    );
+  };
+
+  const deletePost = async (postId: string) => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        Alert.alert(
+          'Login required',
+          'Please sign in first.'
+        );
+
+        router.replace('/login');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('post')
+        .delete()
+        .eq('id', postId)
+        .eq('user_id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      setPosts((currentPosts) =>
+        currentPosts.filter(
+          (post) => post.id !== postId
+        )
+      );
+
+      Alert.alert(
+        'Deleted',
+        'Your food post has been deleted.'
+      );
+    } catch (error) {
+      Alert.alert(
+        'Delete failed',
+        error instanceof Error
+          ? error.message
+          : 'Could not delete the post.'
+      );
+    }
+  };
+
+  const handleEdit = (postId: string) => {
+    router.push({
+      pathname: '/edit-post',
+      params: {
+        id: postId,
+      },
+    });
+  };
+
+  const filteredPosts =
+    selectedCategory === 'All'
+      ? posts
+      : posts.filter(
+          (post) =>
+            post.category === selectedCategory
+        );
+
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" />
+
         <Text style={styles.loadingText}>
           Loading food...
         </Text>
@@ -83,13 +340,54 @@ export default function ExploreScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Explore Food</Text>
+      <Text style={styles.title}>
+        Explore Food
+      </Text>
 
+      {/* Categories */}
       <FlatList
-        data={posts}
-        keyExtractor={(item, index) =>
-          item.id ? String(item.id) : String(index)
-        }
+        data={categories}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => item.name}
+        contentContainerStyle={styles.categoryList}
+        renderItem={({ item }) => {
+          const selected =
+            selectedCategory === item.name;
+
+          return (
+            <TouchableOpacity
+              style={[
+                styles.categoryButton,
+                selected &&
+                  styles.categoryButtonSelected,
+              ]}
+              onPress={() =>
+                setSelectedCategory(item.name)
+              }
+            >
+              <Text style={styles.categoryIcon}>
+                {item.icon}
+              </Text>
+
+              <Text
+                style={[
+                  styles.categoryText,
+                  selected &&
+                    styles.categoryTextSelected,
+                ]}
+              >
+                {item.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        }}
+      />
+
+      {/* Food */}
+      <FlatList
+        data={filteredPosts}
+        keyExtractor={(item) => item.id}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -97,53 +395,140 @@ export default function ExploreScreen() {
           />
         }
         contentContainerStyle={
-          posts.length === 0
+          filteredPosts.length === 0
             ? styles.emptyContainer
             : styles.list
         }
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            {item.photo_url ? (
-              <Image
-                source={{ uri: item.photo_url }}
-                style={styles.foodImage}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.noImage}>
-                <Text>No image</Text>
-              </View>
-            )}
+        renderItem={({ item }) => {
+          const isOwner =
+            currentUserId !== null &&
+            item.user_id === currentUserId;
 
-            <View style={styles.cardContent}>
-              <Text style={styles.dishName}>
-                {item.dish_name || 'Unnamed dish'}
-              </Text>
+          const isOrdering =
+            orderingPostId === item.id;
 
-              <Text style={styles.price}>
-                ₦{Number(item.price || 0).toLocaleString()}
-              </Text>
+          return (
+            <View style={styles.card}>
+              {item.photo_url ? (
+                <Image
+                  source={{ uri: item.photo_url }}
+                  style={styles.foodImage}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.noImage}>
+                  <Text style={styles.noImageText}>
+                    🍽️
+                  </Text>
+                </View>
+              )}
 
-              <Text style={styles.seller}>
-                Seller: {item.seller_name || 'Unknown'}
-              </Text>
+              <View style={styles.cardContent}>
+                <View style={styles.foodHeader}>
+                  <Text
+                    style={styles.dishName}
+                    numberOfLines={1}
+                  >
+                    {item.dish_name ||
+                      'Unnamed dish'}
+                  </Text>
 
-              {item.description ? (
-                <Text style={styles.description}>
-                  {item.description}
+                  <Text style={styles.price}>
+                    ₦
+                    {Number(
+                      item.price || 0
+                    ).toLocaleString()}
+                  </Text>
+                </View>
+
+                <Text style={styles.seller}>
+                  Seller:{' '}
+                  {item.seller_name ||
+                    'Unknown'}
                 </Text>
-              ) : null}
+
+                {item.description ? (
+                  <Text style={styles.description}>
+                    {item.description}
+                  </Text>
+                ) : null}
+
+                {item.category ? (
+                  <View style={styles.categoryTag}>
+                    <Text
+                      style={styles.categoryTagText}
+                    >
+                      {item.category}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* Order button */}
+                {!isOwner && item.user_id && (
+                  <TouchableOpacity
+                    style={styles.orderButton}
+                    onPress={() =>
+                      handleOrder(item)
+                    }
+                    disabled={isOrdering}
+                  >
+                    {isOrdering ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text
+                        style={
+                          styles.orderButtonText
+                        }
+                      >
+                        Order Food
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+
+                {/* Owner controls */}
+                {isOwner && (
+                  <View style={styles.actions}>
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={() =>
+                        handleEdit(item.id)
+                      }
+                    >
+                      <Text style={styles.buttonText}>
+                        Edit
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() =>
+                        handleDelete(item.id)
+                      }
+                    >
+                      <Text style={styles.buttonText}>
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.empty}>
+            <Text style={styles.emptyEmoji}>
+              🍽️
+            </Text>
+
             <Text style={styles.emptyTitle}>
-              No food posts yet
+              No food here yet
             </Text>
 
             <Text style={styles.emptyText}>
-              No posts were returned from Supabase.
+              Try another category or post
+              something delicious.
             </Text>
           </View>
         }
@@ -162,7 +547,43 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     paddingHorizontal: 20,
-    marginBottom: 15,
+    marginBottom: 12,
+  },
+
+  categoryList: {
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    gap: 10,
+  },
+
+  categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+  },
+
+  categoryButtonSelected: {
+    backgroundColor: '#208AEF',
+    borderColor: '#208AEF',
+  },
+
+  categoryIcon: {
+    fontSize: 17,
+    marginRight: 5,
+  },
+
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  categoryTextSelected: {
+    color: '#fff',
   },
 
   list: {
@@ -192,30 +613,98 @@ const styles = StyleSheet.create({
     backgroundColor: '#eee',
   },
 
+  noImageText: {
+    fontSize: 40,
+  },
+
   cardContent: {
     padding: 15,
   },
 
+  foodHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+
   dishName: {
-    fontSize: 22,
+    flex: 1,
+    fontSize: 21,
     fontWeight: 'bold',
-    marginBottom: 5,
   },
 
   price: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 8,
   },
 
   seller: {
     fontSize: 14,
-    marginBottom: 8,
+    color: '#666',
+    marginTop: 6,
   },
 
   description: {
     fontSize: 15,
     lineHeight: 21,
+    marginTop: 8,
+  },
+
+  categoryTag: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#f1f1f1',
+  },
+
+  categoryTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  orderButton: {
+    marginTop: 15,
+    paddingVertical: 13,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#208AEF',
+  },
+
+  orderButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  actions: {
+    flexDirection: 'row',
+    marginTop: 15,
+    gap: 10,
+  },
+
+  editButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#208AEF',
+  },
+
+  deleteButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#D32F2F',
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 
   center: {
@@ -230,7 +719,6 @@ const styles = StyleSheet.create({
 
   emptyContainer: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
 
   empty: {
@@ -238,13 +726,19 @@ const styles = StyleSheet.create({
     padding: 30,
   },
 
+  emptyEmoji: {
+    fontSize: 40,
+  },
+
   emptyTitle: {
     fontSize: 20,
     fontWeight: 'bold',
+    marginTop: 10,
   },
 
   emptyText: {
-    marginTop: 10,
+    marginTop: 8,
     textAlign: 'center',
+    color: '#777',
   },
 });
