@@ -1,5 +1,9 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
-import { Stack } from 'expo-router';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+  Stack,
+} from 'expo-router';
 import { useColorScheme } from 'react-native';
 
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,7 +16,11 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider
-      value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+      value={
+        colorScheme === 'dark'
+          ? DarkTheme
+          : DefaultTheme
+      }
     >
       <AnimatedSplashOverlay />
 
@@ -47,6 +55,13 @@ export default function RootLayout() {
 
         <Stack.Screen
           name="post-food"
+          options={{
+            headerShown: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="edit-post"
           options={{
             headerShown: false,
           }}
