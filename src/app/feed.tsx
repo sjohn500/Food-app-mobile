@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 
 type Post = {
-  id: string;
   seller_name: string;
   dish_name: string;
   price: number;
@@ -31,6 +30,8 @@ export default function FeedScreen() {
       .from('post')
       .select('*')
       .order('created_at', { ascending: false });
+
+    console.log('Feed fetch result:', JSON.stringify({ data, error }));
 
     if (!error && data) {
       setPosts(data as Post[]);
@@ -61,7 +62,7 @@ export default function FeedScreen() {
       <Text style={styles.header}>What's cooking 🍲</Text>
       <FlatList
         data={posts}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(_, index) => index.toString()}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{ paddingBottom: 40 }}
         ListEmptyComponent={
