@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -50,6 +51,38 @@ export default function LoginScreen() {
     }
   };
 
+  const handleForgotPassword = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      Alert.alert('Email required', 'Enter your email above first, then tap "Forgot Password?"');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const redirectTo = Linking.createURL('/reset-password');
+
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo,
+      });
+
+      if (error) {
+        Alert.alert('Error', error.message);
+        return;
+      }
+
+      Alert.alert(
+        'Check your email',
+        'We sent you a password reset link. Open it on this device to set a new password.'
+      );
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.logo}>🍲</Text>
@@ -78,6 +111,12 @@ export default function LoginScreen() {
         secureTextEntry
         autoCapitalize="none"
       />
+
+      {!isSignUp && (
+        <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotButton}>
+          <Text style={styles.forgotButtonText}>Forgot Password?</Text>
+        </TouchableOpacity>
+      )}
 
       {loading ? (
         <ActivityIndicator size="large" color="#D9480F" style={{ marginTop: 10 }} />
@@ -131,6 +170,15 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
     marginBottom: 16,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: 20,
+  },
+  forgotButtonText: {
+    color: '#D9480F',
+    fontSize: 13,
+    fontWeight: '600',
   },
   primaryButton: {
     backgroundColor: '#D9480F',
