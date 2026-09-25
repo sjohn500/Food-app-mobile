@@ -1,4 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import { Image } from 'expo-image';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -6,12 +8,9 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
-import { Image } from 'expo-image';
-import { router, useFocusEffect } from 'expo-router';
 
 import { supabase } from '@/lib/supabase';
 
@@ -210,26 +209,46 @@ export default function ExploreScreen() {
 
       setOrderingPostId(post.id);
 
-      const { error } = await supabase
-        .from('orders')
-        .insert({
-          buyer_id: user.id,
-          seller_id: post.user_id,
-          post_id: post.id,
-          quantity,
-          total_price: totalPrice,
-          status: 'pending',
-        });
+      // Client generates its own idempotency ticket before the network call,
+      // so a retry after a dropped connection always reuses the same reference.
+      const transactionRef = `order-${user.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const { error } = await supabase.rpc('place_order', {
+        p_buyer_id: user.id,
+        p_seller_id: post.user_id,
+        p_post_id: post.id,
+        p_quantity: quantity,
+        p_total_price: totalPrice,
+        p_transaction_ref: transactionRef,
+      });
 
       if (error) {
-        throw error;
+        if (error.message.includes('INSUFFICIENT_FUNDS')) {
+          Alert.alert(
+            'Insufficient funds',
+            'Please top up your wallet before ordering.'
+          );
+        } else if (error.message.includes('WALLET_NOT_FOUND')) {
+          Alert.alert(
+            'No wallet found',
+            'Your account doesn\'t have a wallet set up yet.'
+          );
+        } else if (error.message.includes('DUPLICATE_TRANSACTION')) {
+          Alert.alert(
+            'Already placed',
+            'This order was already submitted.'
+          );
+        } else {
+          throw error;
+        }
+        return;
       }
 
       Alert.alert(
         'Order placed!',
         `${quantity} × ${
           post.dish_name || 'Food'
-        }\nTotal: ₦${totalPrice.toLocaleString()}\n\nYour order is now pending.`
+        }\nTotal: ₦${totalPrice.toLocaleString()}\n\nWaiting for the seller to confirm.`
       );
     } catch (error) {
       console.log('ORDER ERROR:', error);
